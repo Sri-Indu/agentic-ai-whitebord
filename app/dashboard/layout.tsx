@@ -14,7 +14,9 @@ function DashboardLayout({
 
       <div className="flex flex-1 flex-col">
         <AppHeader />
-        {children}
+         <div className="p-5 flex-1">
+          {children}
+         </div>
       </div>
     </SidebarProvider>
   )
