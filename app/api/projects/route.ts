@@ -7,6 +7,13 @@ export async function POST(req: NextRequest) {
 
   const user = await currentUser();
 
+  if(!user?.primaryEmailAddress?.emailAddress){
+     return NextResponse.json(
+      { error: "Unauthorized User" },
+      { status: 400 }
+    );
+  }
+
   if (!projectId || !projectName) {
     return NextResponse.json(
       { error: "Project Information missing" },
