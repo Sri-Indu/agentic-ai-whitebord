@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, {
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import dynamic from "next/dynamic";
-
 import "@excalidraw/excalidraw/index.css";
-
 import { toast } from "@/components/ui/toast";
 import axios from "axios";
 import { useParams } from "next/navigation";
-
 import "./whiteboard.css";
 
 import {
@@ -26,11 +27,17 @@ import {
   Eraser,
 } from "lucide-react";
 
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type {
+  ExcalidrawImperativeAPI,
+} from "@excalidraw/excalidraw/types";
+
+import FloatingProperties from "./FloatingProperties";
 
 const Excalidraw = dynamic(
   async () => {
-    const { Excalidraw } = await import("@excalidraw/excalidraw");
+    const { Excalidraw } =
+      await import("@excalidraw/excalidraw");
+
     return Excalidraw;
   },
   {
@@ -125,67 +132,102 @@ function Whiteboard() {
   const [activeTool, setActiveTool] =
     useState<ToolType>("selection");
 
+  const [selectedElement, setSelectedElement] =
+    useState<any[]>([]);
+
+  const [canvasState, setCanvasState] =
+    useState<any>(null);
+
   const [locked, setLocked] = useState(false);
 
-  const handleCanvasChange = (
-    elements: readonly any[],
-    appState: any,
-    files: any
-  ) => {
-    if (saveTimeRef.current) {
-      clearTimeout(saveTimeRef.current);
-    }
+  const SaveCanvasChanges = useCallback(
+    async (
+      elements: readonly any[],
+      appState: any,
+      files: any
+    ) => {
+      await axios.post("/api/whiteboard", {
+        elements,
+        appState,
+        files,
+        projectId: projectid,
+      });
+    },
+    [projectid]
+  );
 
-    saveTimeRef.current = setTimeout(async () => {
-      try {
-        await SaveCanvasChanges(
-          elements,
-          appState,
-          files
-        );
+  const handleCanvasChange = useCallback(
+    (
+      elements: readonly any[],
+      appState: any,
+      files: any
+    ) => {
+      setCanvasState(appState);
 
-        toast.add({
-          title: "Changes Saved",
-          type: "success",
-        });
-      } catch (error) {
-        console.error(
-          "Failed to save canvas:",
-          error
-        );
+      const selectedIds = Object.keys(
+        appState.selectedElementIds || {}
+      );
 
-        toast.add({
-          title: "Failed to save changes",
-          type: "error",
-        });
+      const selectedElements = elements.filter(
+        (element) =>
+          selectedIds.includes(element.id)
+      );
+
+      setSelectedElement(selectedElements);
+
+      if (saveTimeRef.current) {
+        clearTimeout(saveTimeRef.current);
       }
-    }, 10000);
-  };
 
-  const SaveCanvasChanges = async (
-    elements: readonly any[],
-    appState: any,
-    files: any
-  ) => {
-    await axios.post("/api/whiteboard", {
-      elements,
-      appState,
-      files,
-      projectId: projectid,
-    });
-  };
+      saveTimeRef.current = setTimeout(async () => {
+        try {
+          await SaveCanvasChanges(
+            elements,
+            appState,
+            files
+          );
 
-  const changeTool = (tool: ToolType) => {
-    if (!excalidrawAPI) return;
+          toast.add({
+            title: "Changes Saved",
+            type: "success",
+          });
+        } catch (error) {
+          console.error(
+            "Failed to save canvas:",
+            error
+          );
 
-    setActiveTool(tool);
+          toast.add({
+            title: "Failed to save changes",
+            type: "error",
+          });
+        }
+      }, 10000);
+    },
+    [SaveCanvasChanges]
+  );
 
-    excalidrawAPI.setActiveTool({
-      type: tool,
-    });
-  };
+  const handleExcalidrawAPI = useCallback(
+    (api: ExcalidrawImperativeAPI) => {
+      setExcalidrawAPI(api);
+    },
+    []
+  );
 
-  const toggleLock = () => {
+  const changeTool = useCallback(
+    (tool: ToolType) => {
+      if (!excalidrawAPI) return;
+
+      setActiveTool(tool);
+
+      excalidrawAPI.setActiveTool({
+        type: tool,
+      });
+    },
+    [excalidrawAPI]
+  );
+
+  const toggleLock = useCallback(() => {
     if (!excalidrawAPI) return;
 
     setLocked((prev) => !prev);
@@ -194,25 +236,85 @@ function Whiteboard() {
       type: activeTool,
       locked: !locked,
     });
+  }, [
+    excalidrawAPI,
+    activeTool,
+    locked,
+  ]);
+
+  const getFloatingPosition = () => {
+    if (
+      !selectedElement ||
+      selectedElement.length !== 1 ||
+      !canvasState
+    ) {
+      return {
+        left: 0,
+        top: 0,
+      };
+    }
+
+    const element = selectedElement[0];
+
+    const zoom =
+      canvasState.zoom?.value ?? 1;
+
+    const scrollX =
+      canvasState.scrollX ?? 0;
+
+    const scrollY =
+      canvasState.scrollY ?? 0;
+
+    const centerX =
+      element.x + element.width / 2;
+
+    const screenX =
+      (centerX + scrollX) * zoom;
+
+    const screenY =
+      (element.y + scrollY) * zoom;
+
+    return {
+      left: screenX,
+      top: screenY - 60,
+    };
   };
+
+  const floatingPosition =
+    getFloatingPosition();
+
+  console.log(floatingPosition);
 
   return (
     <div style={{ height: "90vh" }}>
       <Excalidraw
-        excalidrawAPI={(api) =>
-          setExcalidrawAPI(api)
+        excalidrawAPI={
+          handleExcalidrawAPI
         }
-        onChange={handleCanvasChange}
+        onChange={
+          handleCanvasChange
+        }
       />
 
-      {/* Custom Toolbar */}
-      <div className="absolute left-4 top-1/2 z-50 -translate-y-1/2 flex flex-col gap-0.5 rounded-xl border bg-white p-1 shadow-lg">
+      <FloatingProperties
+        selectedElement={
+          selectedElement
+        }
+        canvasState={
+          canvasState
+        }
+        excalidrawAPI={
+          excalidrawAPI
+        }
+      />
 
-        {/* Lock */}
+      <div className="absolute left-4 top-1/2 z-50 -translate-y-1/2 flex flex-col gap-0.5 rounded-xl border bg-white p-1 shadow-lg">
         <button
           onClick={toggleLock}
           className={`flex h-8 w-8 items-center justify-center rounded-lg transition hover:cursor-pointer hover:bg-primary/10 ${
-            locked ? "bg-primary/10" : ""
+            locked
+              ? "bg-primary/10"
+              : ""
           }`}
           title="Lock"
         >
@@ -226,10 +328,8 @@ function Whiteboard() {
           />
         </button>
 
-        {/* Separator */}
         <div className="my-0.5 h-px w-full bg-gray-200" />
 
-        {/* Tools */}
         {tools.map((tool) => {
           const Icon = tool.icon;
 
@@ -237,10 +337,13 @@ function Whiteboard() {
             <button
               key={tool.name}
               onClick={() =>
-                changeTool(tool.name)
+                changeTool(
+                  tool.name
+                )
               }
               className={`flex h-8 w-8 items-center justify-center rounded-lg transition hover:cursor-pointer hover:bg-primary/10 ${
-                activeTool === tool.name
+                activeTool ===
+                tool.name
                   ? "bg-primary/10"
                   : ""
               }`}
@@ -248,7 +351,9 @@ function Whiteboard() {
             >
               <Icon
                 size={16}
-                className={tool.color}
+                className={
+                  tool.color
+                }
               />
             </button>
           );
