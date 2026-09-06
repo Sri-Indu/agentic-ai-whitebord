@@ -32,6 +32,7 @@ import type {
 } from "@excalidraw/excalidraw/types";
 
 import FloatingProperties from "./FloatingProperties";
+import AiHelper from "./AiHelper";
 
 const Excalidraw = dynamic(
   async () => {
@@ -286,7 +287,7 @@ function Whiteboard() {
   console.log(floatingPosition);
 
   return (
-    <div style={{ height: "90vh" }}>
+    <div className="relative" style={{ height: "90vh" }}>
       <Excalidraw
         excalidrawAPI={
           handleExcalidrawAPI
@@ -359,6 +360,8 @@ function Whiteboard() {
           );
         })}
       </div>
+
+      <AiHelper excalidrawAPI={excalidrawAPI} />
     </div>
   );
 }
